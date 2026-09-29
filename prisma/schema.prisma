@@ -1,0 +1,441 @@
+// Orizenn Feedback Intelligence Platform — data model
+// See PRD sections 53–65. Published FormVersions are immutable by convention,
+// enforced in the service layer (lib/forms/service.ts).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  ANALYST
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+  ARCHIVED
+}
+
+enum ResponseMode {
+  IDENTIFIED
+  PSEUDONYMOUS
+  ANONYMOUS
+}
+
+enum FormVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  RATING
+  SCALE
+  YES_NO
+  SHORT_TEXT
+  LONG_TEXT
+  NUMBER
+  DROPDOWN
+}
+
+enum AnalyticsType {
+  RATING_DISTRIBUTION
+  SCALE_DISTRIBUTION
+  OPTION_DISTRIBUTION
+  MULTI_SELECT_FREQUENCY
+  YES_NO_DISTRIBUTION
+  NUMBER_SUMMARY
+  TEXT_RESPONSES
+  THEME_CLUSTER
+  SEGMENT_DISTRIBUTION
+}
+
+enum LinkStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  INVALID
+}
+
+enum UsageVerificationStatus {
+  UNKNOWN
+  NOT_VERIFIED
+  VERIFIED
+}
+
+enum AIJobType {
+  QUESTION_GENERATION
+  QUESTION_REVIEW
+  INSIGHT_GENERATION
+  THEME_EXTRACTION
+}
+
+enum AIJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AIInsightType {
+  SUMMARY
+  FINDING
+  THEME
+}
+
+enum ExportType {
+  RAW_RESPONSES
+  STUDENT_DATASET
+  ANALYTICS_SUMMARY
+  FULL_WORKBOOK
+}
+
+enum ExportStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// ───────────────────────── Tenancy ─────────────────────────
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  campaigns   Campaign[]
+  respondents Respondent[]
+  templates   FormTemplate[]
+  aiJobs      AIJob[]
+  auditLogs   AuditLog[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdCampaigns Campaign[]    @relation("CampaignCreator")
+  createdVersions  FormVersion[] @relation("VersionCreator")
+  exportJobs       ExportJob[]
+  auditLogs        AuditLog[]
+
+  @@index([workspaceId])
+}
+
+// ───────────────────────── Campaigns & Forms ─────────────────────────
+
+model Campaign {
+  id                     String         @id @default(cuid())
+  workspaceId            String
+  name                   String
+  slug                   String
+  description            String?
+  goal                   String
+  targetAudience         String?
+  status                 CampaignStatus @default(DRAFT)
+  responseMode           ResponseMode   @default(PSEUDONYMOUS)
+  allowMultipleResponses Boolean        @default(false)
+  requireQuoteConsent    Boolean        @default(false)
+  /// Which respondent context fields the public form collects, e.g. ["name","college","year"]
+  respondentFields       String[]       @default([])
+  startsAt               DateTime?
+  endsAt                 DateTime?
+  maxResponses           Int?
+  createdById            String
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation("CampaignCreator", fields: [createdById], references: [id])
+  versions    FormVersion[]
+  links       FeedbackLink[]
+  submissions Submission[]
+  aiJobs      AIJob[]
+  insights    AIInsight[]
+  exportJobs  ExportJob[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model FormVersion {
+  id               String            @id @default(cuid())
+  campaignId       String
+  versionNumber    Int
+  status           FormVersionStatus @default(DRAFT)
+  estimatedMinutes Int?
+  introText        String?
+  createdById      String
+  publishedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  campaign    Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation("VersionCreator", fields: [createdById], references: [id])
+  questions   Question[]
+  links       FeedbackLink[]
+  submissions Submission[]
+  aiJobs      AIJob[]
+  insights    AIInsight[]
+
+  @@unique([campaignId, versionNumber])
+  @@index([campaignId])
+  @@index([status])
+}
+
+model Question {
+  id             String        @id @default(cuid())
+  formVersionId  String
+  key            String
+  position       Int
+  text           String
+  description    String?
+  type           QuestionType
+  required       Boolean       @default(true)
+  category       String?
+  analyticsType  AnalyticsType
+  comparableKey  String?
+  /// Per-type validation rules: { min, max, minLength, maxLength, minSelections, maxSelections }
+  validationJson Json?
+  /// Analytics presentation metadata: { displayPriority, showInSummary }
+  analyticsJson  Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  formVersion FormVersion      @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+  options     QuestionOption[]
+  answers     Answer[]
+
+  @@unique([formVersionId, key])
+  @@index([formVersionId])
+}
+
+model QuestionOption {
+  id         String @id @default(cuid())
+  questionId String
+  label      String
+  value      String
+  position   Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, value])
+  @@index([questionId])
+}
+
+model FeedbackLink {
+  id            String     @id @default(cuid())
+  campaignId    String
+  formVersionId String
+  slug          String     @unique
+  status        LinkStatus @default(ACTIVE)
+  expiresAt     DateTime?
+  createdAt     DateTime   @default(now())
+
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  formVersion FormVersion @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+}
+
+// ───────────────────────── Respondents & Submissions ─────────────────────────
+
+model Respondent {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  externalId   String?
+  name         String?
+  email        String?
+  college      String?
+  branch       String?
+  year         String?
+  projectType  String?
+  metadataJson Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, email])
+}
+
+model Submission {
+  id                      String                  @id @default(cuid())
+  campaignId              String
+  formVersionId           String
+  respondentId            String?
+  /// Client-generated idempotency token to defeat double submits.
+  clientToken             String?                 @unique
+  /// Short-lived hashed request fingerprint used only for duplicate/abuse protection.
+  requestHash             String?
+  status                  SubmissionStatus        @default(COMPLETED)
+  startedAt               DateTime?
+  submittedAt             DateTime?
+  completionPercent       Int                     @default(100)
+  durationSeconds         Int?
+  usageVerificationStatus UsageVerificationStatus @default(UNKNOWN)
+  consentToQuote          Boolean?
+  metadataJson            Json?
+  createdAt               DateTime                @default(now())
+
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  formVersion FormVersion @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+  respondent  Respondent? @relation(fields: [respondentId], references: [id], onDelete: SetNull)
+  answers     Answer[]
+
+  @@index([campaignId])
+  @@index([formVersionId])
+  @@index([submittedAt])
+  @@index([status])
+  @@index([campaignId, submittedAt])
+  @@index([formVersionId, submittedAt])
+  @@index([requestHash, createdAt])
+}
+
+model Answer {
+  id           String   @id @default(cuid())
+  submissionId String
+  questionId   String
+  textValue    String?
+  numberValue  Float?
+  booleanValue Boolean?
+  jsonValue    Json?
+  createdAt    DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, questionId])
+  @@index([submissionId])
+  @@index([questionId])
+  @@index([questionId, submissionId])
+}
+
+// ───────────────────────── Templates ─────────────────────────
+
+model FormTemplate {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  /// Array of question definitions (same shape as QuestionDraft in lib/validation/question.ts)
+  questionsJson Json
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// ───────────────────────── AI ─────────────────────────
+
+model AIJob {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  campaignId    String?
+  formVersionId String?
+  type          AIJobType
+  status        AIJobStatus @default(PENDING)
+  inputJson     Json?
+  outputJson    Json?
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  completedAt   DateTime?
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  formVersion FormVersion? @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([campaignId])
+}
+
+model AIInsight {
+  id                  String        @id @default(cuid())
+  campaignId          String
+  formVersionId       String
+  type                AIInsightType
+  title               String
+  content             String
+  sourceQuestionIds   String[]      @default([])
+  sourceResponseCount Int
+  metadataJson        Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  formVersion FormVersion @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, formVersionId])
+}
+
+// ───────────────────────── Exports & Audit ─────────────────────────
+
+model ExportJob {
+  id            String       @id @default(cuid())
+  campaignId    String
+  requestedById String
+  type          ExportType
+  status        ExportStatus @default(PENDING)
+  filtersJson   Json?
+  fileName      String?
+  errorMessage  String?
+  createdAt     DateTime     @default(now())
+  completedAt   DateTime?
+
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  requestedBy User     @relation(fields: [requestedById], references: [id])
+
+  @@index([campaignId])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  userId       String?
+  action       String
+  entityType   String
+  entityId     String
+  metadataJson Json?
+  createdAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
+}
