@@ -1,26 +1,163 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─────────────────────────────────────────────────────────────
+   Orizenn design tokens (PRD §7–8). Tailwind v4 CSS-first theme.
+   Editorial + technical + restrained. Blue is reserved for
+   primary actions, active states, links and key highlights.
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  --color-orizenn-bg: #fafafa;
+  --color-orizenn-surface: #ffffff;
+  --color-orizenn-ink: #0a1b2a;
+  --color-orizenn-muted: #4c5c6b;
+  --color-orizenn-subtle: #64727f;
+  --color-orizenn-border: #e4e9ee;
+  --color-orizenn-blue: #0057ff;
+  --color-orizenn-blue-soft: #eaf0ff;
+  --color-orizenn-dark: #0a1017;
+  --color-orizenn-success: #0f7b4f;
+  --color-orizenn-success-soft: #e6f5ee;
+  --color-orizenn-warning: #9a5b00;
+  --color-orizenn-warning-soft: #fff4e0;
+  --color-orizenn-danger: #b3261e;
+  --color-orizenn-danger-soft: #fdecea;
+
+  --radius-card: 12px;
+  --shadow-card: 0 1px 2px rgba(10, 27, 42, 0.04), 0 1px 0 rgba(10, 27, 42, 0.02);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-schibsted-grotesk), Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-orizenn-bg);
+  color: var(--color-orizenn-ink);
+  font-family: var(--font-sans);
+}
+
+/* Focus visibility (PRD §102) */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-orizenn-blue);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Reusable bases registered as utilities so they can be @apply'd below (Tailwind v4). */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+  @apply disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility mono-label {
+  @apply font-mono text-[11px] uppercase tracking-[0.08em] text-orizenn-subtle;
+}
+
+@layer components {
+  .card {
+    @apply rounded-[var(--radius-card)] border border-orizenn-border bg-orizenn-surface;
+    box-shadow: var(--shadow-card);
+  }
+
+  .label {
+    @apply block text-sm font-medium text-orizenn-ink;
+  }
+
+  .hint {
+    @apply text-xs text-orizenn-subtle;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-orizenn-border bg-orizenn-surface px-3 py-2 text-sm text-orizenn-ink placeholder:text-orizenn-subtle;
+    @apply focus:border-orizenn-blue focus:outline-none focus:ring-2 focus:ring-orizenn-blue/20;
+    @apply disabled:cursor-not-allowed disabled:bg-orizenn-bg disabled:text-orizenn-subtle;
+  }
+
+  .input-error {
+    @apply border-orizenn-danger focus:border-orizenn-danger focus:ring-orizenn-danger/20;
+  }
+
+  .btn-primary {
+    @apply btn bg-orizenn-blue text-white hover:bg-[#0047d1];
+  }
+
+  .btn-secondary {
+    @apply btn border border-orizenn-border bg-orizenn-surface text-orizenn-ink hover:bg-orizenn-bg;
+  }
+
+  .btn-ghost {
+    @apply btn text-orizenn-muted hover:bg-orizenn-bg hover:text-orizenn-ink;
+  }
+
+  .btn-danger {
+    @apply btn border border-orizenn-danger/30 bg-orizenn-surface text-orizenn-danger hover:bg-orizenn-danger-soft;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  .table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .table th {
+    @apply mono-label border-b border-orizenn-border px-4 py-2.5 text-left font-medium;
+  }
+
+  .table td {
+    @apply border-b border-orizenn-border px-4 py-3 align-middle text-orizenn-ink;
+  }
+
+  .table tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .fade-in {
+    animation: fade-in 220ms ease-out both;
+  }
+
+  .rise-in {
+    animation: rise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
