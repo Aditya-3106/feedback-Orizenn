@@ -108,9 +108,32 @@ tests/
 
 Implement `AIProvider` from `src/lib/ai/types.ts` (four methods), register it in `getAIProvider()` and set `AI_PROVIDER=<name>` with `AI_API_KEY`. Prompts live in `src/lib/ai/prompts/`. Output must satisfy the Zod schemas in `types.ts`; anything else is rejected and the UI shows "AI result couldn't be used."
 
-## 5. Deployment notes
+## 5. Deploying to Vercel
 
-- Run `npm run db:deploy` (prisma migrate deploy) before starting the new build.
+1. Import the GitHub repo in Vercel. Framework preset: Next.js. Leave build and install commands on their defaults; Vercel runs the `vercel-build` script automatically.
+2. In **Settings → Environment Variables**, add for Production (and Preview if you use it):
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | pooled Postgres URL |
+   | `DIRECT_DATABASE_URL` | direct (non-pooled) URL, used for migrations |
+   | `AUTH_SECRET` | `openssl rand -base64 32` |
+   | `AUTH_TRUST_HOST` | `true` |
+   | `AI_PROVIDER` | `stub` |
+   | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_FEEDBACK_URL` | your deployment URL, e.g. `https://your-app.vercel.app` |
+
+3. Deploy. On production deploys, `scripts/migrate-deploy.mjs` runs `prisma migrate deploy` when a database URL is set. Preview deploys skip migrations. Set `SKIP_MIGRATIONS=1` to opt out.
+4. Seed the first admin once, from your machine, pointing at the production database:
+
+   ```bash
+   SEED_ADMIN_EMAIL=you@example.com SEED_ADMIN_PASSWORD='a-long-password' npm run db:seed
+   ```
+
+The build itself never needs a database: `prisma generate` and `next build` succeed with no environment variables.
+
+## 6. Other deployment notes
+
+- Outside Vercel, run `npm run db:deploy` (prisma migrate deploy) before starting the new build.
 - Use a pooled `DATABASE_URL` for the app and a direct `DIRECT_DATABASE_URL` for migrations on serverless Postgres.
 - The rate limiter is in-process; behind multiple instances swap `src/lib/security/rate-limit.ts` for a shared store with the same signature.
 - Never expose secrets through `NEXT_PUBLIC_*`.

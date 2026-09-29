@@ -78,8 +78,15 @@ const TEMPLATES: Array<{ name: string; description: string; questions: QuestionD
 ];
 
 async function main() {
-  const adminEmail = (process.env.SEED_ADMIN_EMAIL).toLowerCase();
+  const rawEmail = process.env.SEED_ADMIN_EMAIL?.trim();
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!rawEmail || !adminPassword) {
+    throw new Error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD before running the seed.");
+  }
+  if (adminPassword.length < 8) {
+    throw new Error("SEED_ADMIN_PASSWORD must be at least 8 characters (the login form rejects shorter passwords).");
+  }
+  const adminEmail = rawEmail.toLowerCase();
 
   const workspace = await prisma.workspace.upsert({
     where: { slug: "orizenn" },
